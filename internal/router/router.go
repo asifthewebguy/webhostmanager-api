@@ -3,10 +3,12 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/asifthewebguy/webhostmanager-api/internal/audit"
 	"github.com/asifthewebguy/webhostmanager-api/internal/auth"
 	"github.com/asifthewebguy/webhostmanager-api/internal/config"
 	"github.com/asifthewebguy/webhostmanager-api/internal/health"
 	"github.com/asifthewebguy/webhostmanager-api/internal/middleware"
+	"github.com/asifthewebguy/webhostmanager-api/internal/server"
 	"github.com/asifthewebguy/webhostmanager-api/internal/setup"
 	"github.com/asifthewebguy/webhostmanager-api/internal/users"
 	"github.com/asifthewebguy/webhostmanager-api/pkg/ratelimit"
@@ -18,6 +20,8 @@ type Handlers struct {
 	Auth     *auth.Handler
 	Users    *users.Handler
 	Setup    *setup.Handler
+	Server   *server.Handler
+	Audit    *audit.Handler
 	AuthSvc  *auth.Service
 	SetupSvc *setup.Service
 	Limiter  *ratelimit.LoginLimiter
@@ -38,7 +42,7 @@ func New(cfg *config.Config, h *Handlers) *gin.Engine {
 	// Public
 	v1.GET("/health", h.Health.Check)
 
-	// Setup wizard — public; wizard steps are blocked after completion
+	// Setup wizard — public; steps blocked after completion
 	setupGroup := v1.Group("/setup")
 	setupGroup.GET("/status", h.Setup.Status)
 	setupGroup.POST("/step/:n",
@@ -50,7 +54,7 @@ func New(cfg *config.Config, h *Handlers) *gin.Engine {
 	authGroup := v1.Group("/auth")
 	authGroup.POST("/login", h.Limiter.Middleware(), h.Auth.Login)
 
-	// Auth — me/logout require a valid JWT
+	// Auth — me/logout require JWT
 	authProtected := v1.Group("/auth")
 	authProtected.Use(auth.JWTMiddleware(h.AuthSvc))
 	authProtected.GET("/me", h.Auth.Me)
@@ -68,6 +72,17 @@ func New(cfg *config.Config, h *Handlers) *gin.Engine {
 	usersGroup.POST("", h.Users.Create)
 	usersGroup.PUT("/:id", h.Users.Update)
 	usersGroup.DELETE("/:id", h.Users.Delete)
+
+	// Server metrics & connection
+	serverGroup := protected.Group("/server")
+	serverGroup.GET("/metrics", h.Server.GetMetrics)
+	serverGroup.GET("/info", h.Server.GetInfo)
+	serverGroup.GET("/summary", h.Server.GetSummary)
+	serverGroup.POST("/connection", h.Server.UpdateConnection)
+	serverGroup.POST("/connection/test", h.Server.TestConnection)
+
+	// Audit log
+	protected.GET("/audit-log", h.Audit.List)
 
 	return r
 }

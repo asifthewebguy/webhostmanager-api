@@ -15,6 +15,13 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
+// List returns the most recent audit log entries (descending by created_at).
+func (s *Service) List(limit int) ([]Log, error) {
+	var logs []Log
+	err := s.db.Order("created_at DESC").Limit(limit).Find(&logs).Error
+	return logs, err
+}
+
 // Write persists an audit log entry asynchronously (fire-and-forget).
 func (s *Service) Write(e Entry) {
 	go func() {
