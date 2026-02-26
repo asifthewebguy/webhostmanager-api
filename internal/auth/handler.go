@@ -105,3 +105,32 @@ func (h *Handler) Logout(c *gin.Context) {
 	})
 	c.JSON(http.StatusOK, response.OK(gin.H{"message": "logged out successfully"}))
 }
+
+// ChangePassword godoc
+// PATCH /api/v1/auth/password — available to any authenticated user
+func (h *Handler) ChangePassword(c *gin.Context) {
+	var req struct {
+		CurrentPassword string `json:"current_password" binding:"required"`
+		NewPassword     string `json:"new_password"     binding:"required,min=8"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, response.Error(err.Error()))
+		return
+	}
+	userID := c.GetString(CtxUserID)
+	if err := h.usersSvc.ChangePassword(userID, req.CurrentPassword, req.NewPassword, h.authSvc.HashPassword); err != nil {
+		if err.Error() == "current password is incorrect" {
+			c.JSON(http.StatusUnauthorized, response.Error(err.Error()))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, response.Error("failed to change password"))
+		return
+	}
+	h.auditSvc.Write(audit.Entry{
+		Action:    "auth.password.changed",
+		Username:  c.GetString(CtxUsername),
+		Role:      c.GetString(CtxRole),
+		IPAddress: c.ClientIP(),
+	})
+	c.JSON(http.StatusOK, response.OK(gin.H{"message": "password changed successfully"}))
+}

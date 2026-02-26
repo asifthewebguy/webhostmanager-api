@@ -56,6 +56,25 @@ func (h *Handler) UpdateConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, response.OK(gin.H{"message": "connection config updated"}))
 }
 
+// GetProxyStatus godoc — GET /api/v1/server/proxy/status
+func (h *Handler) GetProxyStatus(c *gin.Context) {
+	status, err := h.svc.GetProxyStatus()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, response.Error("failed to get proxy status"))
+		return
+	}
+	c.JSON(http.StatusOK, response.OK(status))
+}
+
+// RestartProxy godoc — POST /api/v1/server/proxy/restart
+func (h *Handler) RestartProxy(c *gin.Context) {
+	if err := h.svc.RestartProxy(); err != nil {
+		c.JSON(http.StatusBadGateway, response.Error("failed to restart proxy: "+err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, response.OK(gin.H{"message": "proxy restarted"}))
+}
+
 // TestConnection godoc — POST /api/v1/server/connection/test
 func (h *Handler) TestConnection(c *gin.Context) {
 	var req ConnectionRequest

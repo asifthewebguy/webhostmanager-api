@@ -166,9 +166,90 @@ func (s *Service) GetServerInfo() (*ServerInfo, error) {
 	return info, nil
 }
 
-// GetSummary returns resource counts (populated by later phases).
+// GetSummary returns resource counts across managed resources.
 func (s *Service) GetSummary() *Summary {
-	return &Summary{}
+	summary := &Summary{}
+	var count int64
+	if err := s.db.Table("domains").Count(&count).Error; err == nil {
+		summary.Domains = int(count)
+	}
+	count = 0
+	if err := s.db.Table("ssl_certs").Where("status IN ?", []string{"valid", "expiring_soon"}).
+		Count(&count).Error; err == nil {
+		summary.SSLCerts = int(count)
+	}
+	count = 0
+	if err := s.db.Table("wordpress_installs").Count(&count).Error; err == nil {
+		summary.WordPress = int(count)
+	}
+	count = 0
+	if err := s.db.Table("email_accounts").Count(&count).Error; err == nil {
+		summary.EmailAccounts = int(count)
+	}
+	return summary
+}
+
+// GetProxyStatus reads the configured proxy type from settings and checks if the
+// corresponding systemd service is active.
+func (s *Service) GetProxyStatus() (*ProxyStatusResponse, error) {
+	proxyType := s.proxyType()
+	if proxyType == "" {
+		return &ProxyStatusResponse{Type: "unknown", Status: "error"}, nil
+	}
+
+	svcName := proxyServiceName(proxyType)
+	exec, err := s.newExecutor()
+	if err != nil {
+		return &ProxyStatusResponse{Type: proxyType, Status: "error"}, nil
+	}
+	defer exec.Close()
+
+	out, err := exec.Run("systemctl is-active " + svcName)
+	status := "stopped"
+	if err == nil && strings.TrimSpace(out) == "active" {
+		status = "running"
+	}
+	return &ProxyStatusResponse{Type: proxyType, Status: status}, nil
+}
+
+// RestartProxy restarts the configured reverse proxy via systemd.
+func (s *Service) RestartProxy() error {
+	proxyType := s.proxyType()
+	if proxyType == "" {
+		return fmt.Errorf("proxy type not configured")
+	}
+	svcName := proxyServiceName(proxyType)
+	exec, err := s.newExecutor()
+	if err != nil {
+		return fmt.Errorf("build executor: %w", err)
+	}
+	defer exec.Close()
+
+	if _, err := exec.Run("systemctl restart " + svcName); err != nil {
+		return fmt.Errorf("restart %s: %w", svcName, err)
+	}
+	return nil
+}
+
+// proxyType reads the proxy.type setting from the settings table.
+func (s *Service) proxyType() string {
+	var pt string
+	s.db.Table("settings").Where("key = 'proxy.type'").Pluck("value", &pt)
+	return pt
+}
+
+// proxyServiceName maps a proxy type string to the systemd service name.
+func proxyServiceName(proxyType string) string {
+	if proxyType == "apache" {
+		return "apache2"
+	}
+	return "nginx"
+}
+
+// NewExecutor builds and returns an Executor based on the current server connection config.
+// Exported so other packages (e.g. domain) can run commands without duplicating executor logic.
+func (s *Service) NewExecutor() (Executor, error) {
+	return s.newExecutor()
 }
 
 // --- internal helpers ---

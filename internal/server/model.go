@@ -55,6 +55,12 @@ type Summary struct {
 	EmailAccounts int `json:"email_accounts"`
 }
 
+// ProxyStatusResponse holds the current reverse proxy type and running status.
+type ProxyStatusResponse struct {
+	Type   string `json:"type"`   // "nginx" | "apache"
+	Status string `json:"status"` // "running" | "stopped" | "error"
+}
+
 // ConnectionRequest is the body for POST /server/connection.
 type ConnectionRequest struct {
 	ConnectionMode string `json:"connection_mode" binding:"required,oneof=local ssh"`

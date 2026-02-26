@@ -19,6 +19,11 @@ func (s *Scheduler) Every30s(fn func()) {
 	s.c.AddFunc("@every 30s", fn) //nolint:errcheck — spec string is constant
 }
 
+// EveryDay registers a function to run once per day at midnight UTC.
+func (s *Scheduler) EveryDay(fn func()) {
+	s.c.AddFunc("@daily", fn) //nolint:errcheck — spec string is constant
+}
+
 // Start begins executing scheduled jobs in the background.
 func (s *Scheduler) Start() {
 	s.c.Start()

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -93,4 +94,25 @@ func (s *Service) CountSuperAdmins() (int64, error) {
 	var count int64
 	err := s.db.Model(&User{}).Where("role = ?", RoleSuperAdmin).Count(&count).Error
 	return count, err
+}
+
+// ChangePassword verifies currentPw against the stored hash, then updates to a
+// new hash produced by hashFn (typically authSvc.HashPassword).
+func (s *Service) ChangePassword(userID, currentPw, newPw string, hashFn func(string) (string, error)) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("users: invalid id: %w", err)
+	}
+	var u User
+	if err := s.db.First(&u, "id = ?", uid).Error; err != nil {
+		return fmt.Errorf("users: not found: %w", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPw)); err != nil {
+		return fmt.Errorf("current password is incorrect")
+	}
+	hash, err := hashFn(newPw)
+	if err != nil {
+		return fmt.Errorf("users: hash password: %w", err)
+	}
+	return s.db.Model(&u).Update("password_hash", hash).Error
 }
